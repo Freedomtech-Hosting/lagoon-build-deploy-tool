@@ -9,7 +9,7 @@ image: ""
 environmentType: production
 
 persistentStorage:
-  size: 5oGi
+  size: 50Gi
 
 imagePullPolicy: Always
 
