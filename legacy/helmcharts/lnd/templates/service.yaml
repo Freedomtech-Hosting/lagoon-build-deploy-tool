@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "lnd.fullname" . }}
+  labels:
+    {{- include "lnd.labels" . | nindent 4 }}
+  annotations:
+    {{- include "lnd.annotations" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: 8080
+      targetPort: rest
+      protocol: TCP
+      name: rest
+    - port: 10009
+      targetPort: grpc
+      protocol: TCP
+      name: grpc
+  selector:
+    {{- include "lnd.selectorLabels" . | nindent 4 }}

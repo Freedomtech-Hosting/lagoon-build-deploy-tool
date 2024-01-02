@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "tor.fullname" . }}
+  labels:
+    {{- include "tor.labels" . | nindent 4 }}
+  annotations:
+    {{- include "tor.annotations" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: 9050
+      targetPort: socks
+      protocol: TCP
+      name: socks
+    - port: 9051
+      targetPort: control
+      protocol: TCP
+      name: control
+  selector:
+    {{- include "tor.selectorLabels" . | nindent 4 }}

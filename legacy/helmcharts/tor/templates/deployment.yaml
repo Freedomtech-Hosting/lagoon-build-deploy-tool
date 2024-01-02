@@ -1,0 +1,91 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "tor.fullname" . }}
+  labels:
+    {{- include "tor.labels" . | nindent 4 }}
+    {{- if .Values.useSpot }}
+    lagoon.sh/spot: {{ .Values.useSpot | quote }}
+    {{- end }}
+  annotations:
+    {{- include "tor.annotations" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  # strategy:
+  #   type: Recreate
+  selector:
+    matchLabels:
+      {{- include "tor.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "tor.labels" . | nindent 8 }}
+        {{- include "tor.datadogLabels" . | nindent 8 }}
+        {{- if .Values.useSpot }}
+        lagoon.sh/spot: {{ .Values.useSpot | quote }}
+        {{- end }}
+      annotations:
+        {{- include "tor.annotations" . | nindent 8 }}
+        lagoon.sh/configMapSha: {{ .Values.configMapSha | quote }}
+    spec:
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      priorityClassName: {{ include "tor.lagoonPriority" . }}
+      enableServiceLinks: false
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- if .Values.dynamicSecretVolumes }}
+      volumes:
+        {{- toYaml .Values.dynamicSecretVolumes | nindent 8 }}
+      {{- end }}
+      containers:
+        - image: {{ .Values.image | quote }}
+          name: {{ .Chart.Name }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          ports:
+            - name: socks
+              containerPort: 9050
+              protocol: TCP
+            - name: control
+              containerPort: 9051
+              protocol: TCP
+          readinessProbe:
+            tcpSocket:
+              port: 9051
+            initialDelaySeconds: 1
+            timeoutSeconds: 1
+          livenessProbe:
+            tcpSocket:
+              port: 9051
+            initialDelaySeconds: 60
+            periodSeconds: 10
+          env:
+            ## LAGOON_GIT_SHA is injected directly and not loaded via `lagoon-env` config
+            ## This will cause the pod to redeploy on every deployment, even the files have not changed
+            - name: LAGOON_GIT_SHA
+              value: {{ .Values.gitSha | quote }}
+            - name: CRONJOBS
+              value: {{ .Values.inPodCronjobs | toYaml | indent 14 | trim }}
+          envFrom:
+            - configMapRef:
+                name: lagoon-env
+          {{- if .Values.dynamicSecretMounts }}
+          volumeMounts:
+            {{- toYaml .Values.dynamicSecretMounts | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
