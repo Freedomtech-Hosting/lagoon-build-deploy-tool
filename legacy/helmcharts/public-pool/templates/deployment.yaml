@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "public-pool.fullname" . }}
+  labels:
+    {{- include "public-pool.labels" . | nindent 4 }}
+    {{- if .Values.useSpot }}
+    lagoon.sh/spot: {{ .Values.useSpot | quote }}
+    {{- end }}
+  annotations:
+    {{- include "public-pool.annotations" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "public-pool.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "public-pool.labels" . | nindent 8 }}
+        {{- include "public-pool.datadogLabels" . | nindent 8 }}
+        {{- if .Values.useSpot }}
+        lagoon.sh/spot: {{ .Values.useSpot | quote }}
+        {{- end }}
+      annotations:
+        {{- include "public-pool.annotations" . | nindent 8 }}
+        lagoon.sh/configMapSha: {{ .Values.configMapSha | quote }}
+    spec:
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      volumes:
+        - name: {{ include "public-pool.persistentStorageName" . }}
+          persistentVolumeClaim:
+            claimName: {{ include "public-pool.persistentStorageName" . }}
+        {{- if .Values.dynamicSecretVolumes }}
+          {{- toYaml .Values.dynamicSecretVolumes | nindent 8 }}
+        {{- end }}
+      priorityClassName: {{ include "public-pool.lagoonPriority" . }}
+      enableServiceLinks: false
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - image: {{ .Values.image | quote }}
+          name: {{ .Chart.Name }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          ports:
+            - name: stratum
+              containerPort: 3333
+              protocol: TCP
+            - name: api
+              containerPort: 3334
+              protocol: TCP
+          readinessProbe:
+            tcpSocket:
+              port: 3334
+            initialDelaySeconds: 1
+            timeoutSeconds: 1
+          livenessProbe:
+            tcpSocket:
+              port: 3334
+            initialDelaySeconds: 60
+            periodSeconds: 10
+          env:
+            ## LAGOON_GIT_SHA is injected directly and not loaded via `lagoon-env` config
+            ## This will cause the pod to redeploy on every deployment, even the files have not changed
+            - name: LAGOON_GIT_SHA
+              value: {{ .Values.gitSha | quote }}
+            - name: CRONJOBS
+              value: {{ .Values.inPodCronjobs | toYaml | indent 14 | trim }}
+          envFrom:
+            - configMapRef:
+                name: lagoon-env
+          volumeMounts:
+            - name: {{ include "public-pool.persistentStorageName" . }}
+              mountPath: {{ .Values.persistentStorage.path | quote }}
+          {{- if .Values.dynamicSecretMounts }}
+            {{- toYaml .Values.dynamicSecretMounts | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
